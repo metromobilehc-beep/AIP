@@ -140,11 +140,14 @@
           <div class="section-title">Line Items</div>
           <div id="items"></div>
           <div class="item-row item-head">
-            <div>Type</div><div>Description</div><div>Qty</div><div>Unit cost</div><div>Line total</div><div></div>
+            <div>Type</div><div>Description</div><div>Qty / Hrs</div><div>Unit cost</div><div>Line total</div><div></div>
           </div>
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn ghost small" onclick="addItem('material')">+ Material / COG item</button>
-            <button class="btn ghost small" onclick="addItem('labor')">+ Labor item</button>
+            <button class="btn ghost small" onclick="addItem('labor')">+ Labor item (hours)</button>
+          </div>
+          <div style="margin-top:8px;">
+            <button class="btn ghost small" onclick="applyLaborRateToAll()">Apply standard rate to all labor items</button>
           </div>
         </div>
 
@@ -159,6 +162,9 @@
         <div class="summary">
           <div class="section-title" style="color:#fff;opacity:.75;">Pricing</div>
 
+          <div class="row"><span>Standard labor rate ($/hr)</span>
+            <input id="f-laborRate" type="number" min="0" step="0.5" style="width:64px;text-align:right;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 6px;" />
+          </div>
           <div class="row"><span>COG markup %</span>
             <input id="f-cogMarkup" type="number" min="0" max="100" style="width:64px;text-align:right;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 6px;" />
           </div>
@@ -220,7 +226,7 @@ function emptyQuote() {
     date: new Date().toISOString().slice(0,10),
     notes: "",
     preparedBy: currentUser ? currentUser.id : null,
-    cogMarkup: 25, laborMarkup: 25, overheadPct: 30,
+    cogMarkup: 25, laborMarkup: 25, overheadPct: 30, laborRate: 25,
     items: [
       { id: crypto.randomUUID(), type: "material", description: "", qty: 1, unitCost: 0 },
     ],
@@ -320,6 +326,7 @@ function renderQuote() {
   document.getElementById("f-phone").value = quote.phone;
   document.getElementById("f-date").value = quote.date;
   document.getElementById("f-notes").value = quote.notes;
+  document.getElementById("f-laborRate").value = quote.laborRate;
   document.getElementById("f-cogMarkup").value = quote.cogMarkup;
   document.getElementById("f-laborMarkup").value = quote.laborMarkup;
   document.getElementById("f-overheadPct").value = quote.overheadPct;
@@ -340,7 +347,7 @@ function bindFieldListeners() {
       quote[f] = e.target.value;
     });
   });
-  ["cogMarkup","laborMarkup","overheadPct"].forEach(f => {
+  ["cogMarkup","laborMarkup","overheadPct","laborRate"].forEach(f => {
     document.getElementById("f-"+f).addEventListener("input", e => {
       quote[f] = Number(e.target.value) || 0;
       recalc();
@@ -352,7 +359,16 @@ function bindFieldListeners() {
 }
 
 function addItem(type) {
-  quote.items.push({ id: crypto.randomUUID(), type, description: "", qty: 1, unitCost: 0 });
+  const unitCost = type === "labor" ? (quote.laborRate || 0) : 0;
+  quote.items.push({ id: crypto.randomUUID(), type, description: "", qty: 1, unitCost });
+  renderItems();
+  recalc();
+}
+
+function applyLaborRateToAll() {
+  quote.items.forEach(it => {
+    if (it.type === "labor") it.unitCost = quote.laborRate || 0;
+  });
   renderItems();
   recalc();
 }
@@ -385,7 +401,12 @@ function renderItems() {
       <div data-role="lineTotal" style="text-align:right;font-variant-numeric:tabular-nums;">${currency(it.qty*it.unitCost)}</div>
       <button class="btn danger" title="Remove" onclick="removeItem('${it.id}')">✕</button>
     `;
-    row.querySelector('[data-role="type"]').addEventListener("change", e => { it.type = e.target.value; recalc(); });
+    row.querySelector('[data-role="type"]').addEventListener("change", e => {
+      it.type = e.target.value;
+      if (it.type === "labor" && !it.unitCost) it.unitCost = quote.laborRate || 0;
+      renderItems();
+      recalc();
+    });
     row.querySelector('[data-role="description"]').addEventListener("input", e => { it.description = e.target.value; });
     row.querySelector('[data-role="qty"]').addEventListener("input", e => { it.qty = Number(e.target.value)||0; recalc(); });
     row.querySelector('[data-role="unitCost"]').addEventListener("input", e => { it.unitCost = Number(e.target.value)||0; recalc(); });
@@ -629,6 +650,7 @@ async function saveQuote() {
       cog_markup: quote.cogMarkup,
       labor_markup: quote.laborMarkup,
       overhead_pct: quote.overheadPct,
+      labor_rate: quote.laborRate,
     };
 
     if (quoteId) {
@@ -700,7 +722,7 @@ async function loadQuote(id) {
     clientName: q.client_name, address: q.address, phone: q.phone,
     date: q.quote_date, notes: q.notes,
     preparedBy: q.created_by,
-    cogMarkup: q.cog_markup, laborMarkup: q.labor_markup, overheadPct: q.overhead_pct,
+    cogMarkup: q.cog_markup, laborMarkup: q.labor_markup, overheadPct: q.overhead_pct, laborRate: q.labor_rate ?? 25,
     items: (items||[]).map(i => ({ id: crypto.randomUUID(), type: i.item_type, description: i.description, qty: Number(i.qty), unitCost: Number(i.unit_cost) })),
   };
   if (!quote.items.length) quote.items = [{ id: crypto.randomUUID(), type: "material", description: "", qty: 1, unitCost: 0 }];
