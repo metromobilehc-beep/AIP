@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aging in Place — Quote Tool</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --teal-dark:#154C47;
+    --orange:#F44B1A;
+    --amber:#F7941D;
+    --teal-light:#47B9B7;
+    --bg:#F7F5F0;
+    --ink:#22282A;
+    --line:#e0ddd5;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;font-family:'Inter','Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  header{background:var(--teal-dark);color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  header .title{font-family:Georgia,'Times New Roman',serif;font-size:22px;}
+  header .sub{font-size:12px;opacity:.8;margin-top:2px;}
+  header .right{display:flex;align-items:center;gap:12px;font-size:13px;}
+  button{cursor:pointer;font-family:inherit;}
+  .btn{background:var(--orange);color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:14px;font-weight:600;}
+  .btn.secondary{background:transparent;border:1px solid var(--teal-light);color:#fff;}
+  .btn.ghost{background:none;border:1px dashed #c9c4b8;color:var(--teal-dark);}
+  .btn.small{padding:5px 10px;font-size:12px;}
+  .btn.danger{background:none;border:none;color:#c99;}
+  input,select,textarea{width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-family:inherit;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--teal-light);outline-offset:1px;}
+  label{display:block;font-size:12px;color:#777;margin-bottom:4px;}
+  .card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);margin-bottom:20px;}
+  .section-title{font-size:12px;font-weight:600;color:var(--teal-dark);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px;}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .full{grid-column:1/-1;}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;}
+  .item-row{display:grid;grid-template-columns:100px 1fr 60px 100px 100px 28px;gap:8px;align-items:center;margin-bottom:8px;}
+  .item-head{font-size:11px;color:#999;}
+  .chip{background:#F1EFE8;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--teal-dark);}
+  .summary{background:var(--teal-dark);color:#fff;border-radius:10px;padding:20px;position:sticky;top:20px;}
+  .summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
+  .summary .row.dim{opacity:.75;}
+  .summary hr{border:none;border-top:1px solid rgba(255,255,255,0.2);margin:10px 0;}
+  .summary .grand{display:flex;justify-content:space-between;align-items:baseline;}
+  .summary .grand .amt{font-size:26px;font-family:Georgia,serif;color:var(--amber);}
+  .login-screen{min-height:100vh;display:grid;grid-template-columns:1fr 1fr;}
+  .login-brand{background:var(--teal-dark);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:60px;position:relative;overflow:hidden;}
+  .login-brand::before{content:"";position:absolute;top:-120px;right:-120px;width:320px;height:320px;border-radius:50%;background:radial-gradient(circle,rgba(71,185,183,0.35),transparent 70%);}
+  .login-brand::after{content:"";position:absolute;bottom:-160px;left:-100px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(244,75,26,0.18),transparent 70%);}
+  .login-mark{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--amber),var(--orange));display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:700;font-size:20px;color:#fff;margin-bottom:28px;position:relative;z-index:1;}
+  .login-brand h1{font-family:Georgia,'Times New Roman',serif;font-size:32px;line-height:1.25;margin:0 0 12px;position:relative;z-index:1;max-width:380px;}
+  .login-brand p{font-size:14px;opacity:.75;max-width:340px;line-height:1.6;position:relative;z-index:1;}
+  .login-brand .tag{display:inline-block;margin-top:28px;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;opacity:.55;position:relative;z-index:1;}
+  .login-form-side{display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg);}
+  .login-wrap{width:100%;max-width:360px;padding:36px 34px;background:#fff;border-radius:14px;box-shadow:0 2px 16px rgba(21,76,71,0.08);border:1px solid var(--line);}
+  .login-wrap .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--teal-light);font-weight:600;margin-bottom:8px;}
+  .login-wrap h2{font-family:Georgia,serif;font-size:22px;color:var(--teal-dark);margin:0 0 24px;}
+  .field{margin-bottom:16px;}
+  .error{color:#b23; font-size:13px;margin-top:10px;}
+  @media(max-width:760px){
+    .login-screen{grid-template-columns:1fr;}
+    .login-brand{padding:40px 28px;min-height:220px;}
+    .login-brand h1{font-size:24px;}
+  }
+  .status{font-size:12px;margin-top:8px;}
+  .status.ok{color:#2a7;}
+  .status.err{color:#c33;}
+  .saved-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;}
+  .saved-item .meta{font-size:11px;color:#999;}
+  .saved-item .name{font-size:13px;}
+  .hidden{display:none !important;}
+  @media(max-width:760px){
+    .layout{grid-template-columns:1fr;}
+    .grid2{grid-template-columns:1fr;}
+    .item-row{grid-template-columns:80px 1fr 44px 80px 80px 24px;}
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="login-screen">
+  <div class="login-brand">
+    <div class="login-mark">M</div>
+    <h1>Aging in Place<br/>Quote Tool</h1>
+    <p>Build transparent, cost-based quotes for home safety assessments and modifications — shared across the team.</p>
+    <span class="tag">Metro Mobile Health Care · Internal</span>
+  </div>
+  <div class="login-form-side">
+    <div class="login-wrap">
+      <div class="eyebrow">Staff Sign In</div>
+      <h2>Welcome back</h2>
+      <div class="field">
+        <label>Email</label>
+        <input id="login-email" type="email" placeholder="you@metromobilehc.com" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="login-password" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()" />
+      </div>
+      <button class="btn" style="width:100%" onclick="login()">Sign In</button>
+      <div id="login-error" class="error"></div>
+    </div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div>
+      <div class="title">Aging in Place — Quote Tool</div>
+      <div class="sub">Metro Mobile Health Care</div>
+    </div>
+    <div class="right">
+      <span id="who"></span>
+      <button class="btn secondary" onclick="newQuote()">New Quote</button>
+      <button class="btn secondary" onclick="logout()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="layout">
+      <!-- MAIN -->
+      <div>
+        <div class="card">
+          <div class="section-title">Client Information</div>
+          <div class="grid2">
+            <div><label>Client Name</label><input id="f-clientName" placeholder="Jane Doe" /></div>
+            <div><label>Phone</label><input id="f-phone" placeholder="(918) 555-0100" /></div>
+            <div class="full"><label>Address</label><input id="f-address" placeholder="Street, City, OK" /></div>
+            <div><label>Prepared By</label><input id="f-preparedBy" disabled /></div>
+            <div><label>Date</label><input id="f-date" type="date" /></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">Line Items</div>
+          <div id="items"></div>
+          <div class="item-row item-head">
+            <div>Type</div><div>Description</div><div>Qty</div><div>Unit cost</div><div>Line total</div><div></div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn ghost small" onclick="addItem('material')">+ Material / COG item</button>
+            <button class="btn ghost small" onclick="addItem('labor')">+ Labor item</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">Notes</div>
+          <textarea id="f-notes" rows="4" placeholder="Assessment findings, access notes, follow-up items..."></textarea>
+        </div>
+      </div>
+
+      <!-- SIDEBAR -->
+      <div>
+        <div class="summary">
+          <div class="section-title" style="color:#fff;opacity:.75;">Pricing</div>
+
+          <div class="row"><span>COG markup %</span>
+            <input id="f-cogMarkup" type="number" min="0" max="100" style="width:64px;text-align:right;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 6px;" />
+          </div>
+          <div class="row"><span>Labor markup %</span>
+            <input id="f-laborMarkup" type="number" min="0" max="100" style="width:64px;text-align:right;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 6px;" />
+          </div>
+          <div class="row"><span>Overhead / profit %</span>
+            <input id="f-overheadPct" type="number" min="0" max="100" style="width:64px;text-align:right;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:3px 6px;" />
+          </div>
+
+          <hr />
+
+          <div class="row dim"><span>Materials (COG)</span><span id="s-cogBase">$0.00</span></div>
+          <div class="row dim"><span>Materials + markup</span><span id="s-cogMarked">$0.00</span></div>
+          <div class="row dim"><span>Labor (base)</span><span id="s-laborBase">$0.00</span></div>
+          <div class="row dim"><span>Labor + markup</span><span id="s-laborMarked">$0.00</span></div>
+
+          <hr />
+          <div class="row"><span>Subtotal</span><span id="s-subtotal">$0.00</span></div>
+          <div class="row"><span>Overhead / profit</span><span id="s-overhead">$0.00</span></div>
+          <hr />
+          <div class="grand"><span>Total</span><span class="amt" id="s-total">$0.00</span></div>
+
+          <button class="btn" style="width:100%;margin-top:16px;" onclick="saveQuote()">Save Quote</button>
+          <div id="save-status" class="status"></div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="section-title">Saved Quotes</div>
+          <div id="saved-list"><div class="saved-item">Loading...</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====== CONFIG — fill these in after creating your Supabase project ======
+const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+// ===========================================================================
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let currentProfile = null;
+let quote = null; // active quote state
+
+function emptyQuote() {
+  return {
+    id: null,
+    clientName: "", address: "", phone: "",
+    date: new Date().toISOString().slice(0,10),
+    notes: "",
+    cogMarkup: 25, laborMarkup: 25, overheadPct: 30,
+    items: [
+      { id: crypto.randomUUID(), type: "material", description: "", qty: 1, unitCost: 0 },
+    ],
+  };
+}
+
+// ---------- AUTH ----------
+async function login() {
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const errEl = document.getElementById("login-error");
+  errEl.textContent = "";
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { errEl.textContent = error.message; return; }
+  currentUser = data.user;
+  await afterLogin();
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  currentUser = null; currentProfile = null;
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+}
+
+async function afterLogin() {
+  // ensure profile row exists
+  const { data: existing } = await sb.from("profiles").select("*").eq("id", currentUser.id).maybeSingle();
+  if (!existing) {
+    const displayName = currentUser.email.split("@")[0];
+    await sb.from("profiles").insert({ id: currentUser.id, display_name: displayName });
+    currentProfile = { id: currentUser.id, display_name: displayName };
+  } else {
+    currentProfile = existing;
+  }
+  document.getElementById("who").textContent = currentProfile.display_name;
+  document.getElementById("f-preparedBy").value = currentProfile.display_name;
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  newQuote();
+  loadSavedList();
+}
+
+async function checkSession() {
+  const { data } = await sb.auth.getSession();
+  if (data.session) {
+    currentUser = data.session.user;
+    await afterLogin();
+  }
+}
+
+// ---------- QUOTE STATE ----------
+function newQuote() {
+  quote = emptyQuote();
+  renderQuote();
+}
+
+function renderQuote() {
+  document.getElementById("f-clientName").value = quote.clientName;
+  document.getElementById("f-address").value = quote.address;
+  document.getElementById("f-phone").value = quote.phone;
+  document.getElementById("f-date").value = quote.date;
+  document.getElementById("f-notes").value = quote.notes;
+  document.getElementById("f-cogMarkup").value = quote.cogMarkup;
+  document.getElementById("f-laborMarkup").value = quote.laborMarkup;
+  document.getElementById("f-overheadPct").value = quote.overheadPct;
+  renderItems();
+  recalc();
+}
+
+function bindFieldListeners() {
+  ["clientName","address","phone","date","notes"].forEach(f => {
+    document.getElementById("f-"+f).addEventListener("input", e => {
+      quote[f] = e.target.value;
+    });
+  });
+  ["cogMarkup","laborMarkup","overheadPct"].forEach(f => {
+    document.getElementById("f-"+f).addEventListener("input", e => {
+      quote[f] = Number(e.target.value) || 0;
+      recalc();
+    });
+  });
+}
+
+function addItem(type) {
+  quote.items.push({ id: crypto.randomUUID(), type, description: "", qty: 1, unitCost: 0 });
+  renderItems();
+  recalc();
+}
+
+function removeItem(id) {
+  quote.items = quote.items.filter(i => i.id !== id);
+  renderItems();
+  recalc();
+}
+
+function currency(n) {
+  const v = Number.isFinite(n) ? n : 0;
+  return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+function renderItems() {
+  const container = document.getElementById("items");
+  container.innerHTML = "";
+  quote.items.forEach(it => {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `
+      <select data-role="type">
+        <option value="material" ${it.type==="material"?"selected":""}>Material</option>
+        <option value="labor" ${it.type==="labor"?"selected":""}>Labor</option>
+      </select>
+      <input data-role="description" placeholder="Description" value="${escapeHtml(it.description)}" />
+      <input data-role="qty" type="number" min="0" step="0.1" value="${it.qty}" style="text-align:center" />
+      <input data-role="unitCost" type="number" min="0" step="0.01" value="${it.unitCost}" style="text-align:right" />
+      <div data-role="lineTotal" style="text-align:right;font-variant-numeric:tabular-nums;">${currency(it.qty*it.unitCost)}</div>
+      <button class="btn danger" title="Remove" onclick="removeItem('${it.id}')">✕</button>
+    `;
+    row.querySelector('[data-role="type"]').addEventListener("change", e => { it.type = e.target.value; recalc(); });
+    row.querySelector('[data-role="description"]').addEventListener("input", e => { it.description = e.target.value; });
+    row.querySelector('[data-role="qty"]').addEventListener("input", e => { it.qty = Number(e.target.value)||0; recalc(); });
+    row.querySelector('[data-role="unitCost"]').addEventListener("input", e => { it.unitCost = Number(e.target.value)||0; recalc(); });
+    container.appendChild(row);
+  });
+}
+
+function escapeHtml(s) {
+  return (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function recalc() {
+  // refresh line totals in place
+  document.querySelectorAll("#items .item-row").forEach((row, idx) => {
+    const it = quote.items[idx];
+    row.querySelector('[data-role="lineTotal"]').textContent = currency(it.qty*it.unitCost);
+  });
+
+  const cogBase = quote.items.filter(i=>i.type==="material").reduce((s,i)=>s+i.qty*i.unitCost,0);
+  const laborBase = quote.items.filter(i=>i.type==="labor").reduce((s,i)=>s+i.qty*i.unitCost,0);
+  const cogMarked = cogBase * (1 + (quote.cogMarkup||0)/100);
+  const laborMarked = laborBase * (1 + (quote.laborMarkup||0)/100);
+  const subtotal = cogMarked + laborMarked;
+  const overhead = subtotal * ((quote.overheadPct||0)/100);
+  const total = subtotal + overhead;
+
+  document.getElementById("s-cogBase").textContent = currency(cogBase);
+  document.getElementById("s-cogMarked").textContent = currency(cogMarked);
+  document.getElementById("s-laborBase").textContent = currency(laborBase);
+  document.getElementById("s-laborMarked").textContent = currency(laborMarked);
+  document.getElementById("s-subtotal").textContent = currency(subtotal);
+  document.getElementById("s-overhead").textContent = currency(overhead);
+  document.getElementById("s-total").textContent = currency(total);
+
+  return { cogBase, laborBase, cogMarked, laborMarked, subtotal, overhead, total };
+}
+
+// ---------- PERSISTENCE ----------
+async function saveQuote() {
+  const statusEl = document.getElementById("save-status");
+  statusEl.textContent = "Saving...";
+  statusEl.className = "status";
+  const totals = recalc();
+
+  try {
+    let quoteId = quote.id;
+    const payload = {
+      created_by: currentUser.id,
+      client_name: quote.clientName,
+      address: quote.address,
+      phone: quote.phone,
+      quote_date: quote.date,
+      notes: quote.notes,
+      cog_markup: quote.cogMarkup,
+      labor_markup: quote.laborMarkup,
+      overhead_pct: quote.overheadPct,
+    };
+
+    if (quoteId) {
+      const { error } = await sb.from("quotes").update(payload).eq("id", quoteId);
+      if (error) throw error;
+      await sb.from("quote_items").delete().eq("quote_id", quoteId);
+    } else {
+      const { data, error } = await sb.from("quotes").insert(payload).select().single();
+      if (error) throw error;
+      quoteId = data.id;
+      quote.id = quoteId;
+    }
+
+    const itemRows = quote.items.map((it, idx) => ({
+      quote_id: quoteId,
+      item_type: it.type,
+      description: it.description,
+      qty: it.qty,
+      unit_cost: it.unitCost,
+      sort_order: idx,
+    }));
+    if (itemRows.length) {
+      const { error: itemsErr } = await sb.from("quote_items").insert(itemRows);
+      if (itemsErr) throw itemsErr;
+    }
+
+    statusEl.textContent = "Saved";
+    statusEl.className = "status ok";
+    loadSavedList();
+    setTimeout(() => { statusEl.textContent = ""; }, 2000);
+  } catch (e) {
+    statusEl.textContent = "Couldn't save — " + (e.message || "try again");
+    statusEl.className = "status err";
+  }
+}
+
+async function loadSavedList() {
+  const listEl = document.getElementById("saved-list");
+  listEl.innerHTML = `<div class="saved-item">Loading...</div>`;
+  const { data, error } = await sb
+    .from("quotes")
+    .select("id, client_name, quote_date, created_by, profiles(display_name)")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) { listEl.innerHTML = `<div class="saved-item">Couldn't load quotes.</div>`; return; }
+  if (!data.length) { listEl.innerHTML = `<div class="saved-item">No saved quotes yet.</div>`; return; }
+  listEl.innerHTML = "";
+  data.forEach(rec => {
+    const row = document.createElement("div");
+    row.className = "saved-item";
+    row.innerHTML = `
+      <button style="background:none;border:none;text-align:left;cursor:pointer;padding:0;flex:1;" onclick="loadQuote('${rec.id}')">
+        <div class="name">${escapeHtml(rec.client_name || "Unnamed client")}</div>
+        <div class="meta">${rec.quote_date} · by ${escapeHtml(rec.profiles ? rec.profiles.display_name : "?")}</div>
+      </button>
+      <button class="btn danger" onclick="deleteQuote('${rec.id}')">✕</button>
+    `;
+    listEl.appendChild(row);
+  });
+}
+
+async function loadQuote(id) {
+  const { data: q, error } = await sb.from("quotes").select("*").eq("id", id).single();
+  if (error) return;
+  const { data: items } = await sb.from("quote_items").select("*").eq("quote_id", id).order("sort_order");
+  quote = {
+    id: q.id,
+    clientName: q.client_name, address: q.address, phone: q.phone,
+    date: q.quote_date, notes: q.notes,
+    cogMarkup: q.cog_markup, laborMarkup: q.labor_markup, overheadPct: q.overhead_pct,
+    items: (items||[]).map(i => ({ id: crypto.randomUUID(), type: i.item_type, description: i.description, qty: Number(i.qty), unitCost: Number(i.unit_cost) })),
+  };
+  if (!quote.items.length) quote.items = [{ id: crypto.randomUUID(), type: "material", description: "", qty: 1, unitCost: 0 }];
+  renderQuote();
+}
+
+async function deleteQuote(id) {
+  await sb.from("quotes").delete().eq("id", id);
+  if (quote.id === id) newQuote();
+  loadSavedList();
+}
+
+// ---------- INIT ----------
+bindFieldListeners();
+checkSession();
+</script>
+</body>
+</html>
