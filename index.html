@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Aging in Place — Quote Tool</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --teal-dark:#154C47;
@@ -129,7 +131,7 @@
             <div><label>Client Name</label><input id="f-clientName" placeholder="Jane Doe" /></div>
             <div><label>Phone</label><input id="f-phone" placeholder="(918) 555-0100" /></div>
             <div class="full"><label>Address</label><input id="f-address" placeholder="Street, City, OK" /></div>
-            <div><label>Prepared By</label><input id="f-preparedBy" disabled /></div>
+            <div><label>Prepared By</label><select id="f-preparedBy"></select></div>
             <div><label>Date</label><input id="f-date" type="date" /></div>
           </div>
         </div>
@@ -181,6 +183,10 @@
           <div class="grand"><span>Total</span><span class="amt" id="s-total">$0.00</span></div>
 
           <button class="btn" style="width:100%;margin-top:16px;" onclick="saveQuote()">Save Quote</button>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn secondary" style="flex:1;border-color:rgba(255,255,255,0.3);" onclick="exportPDF()">Export PDF</button>
+            <button class="btn secondary" style="flex:1;border-color:rgba(255,255,255,0.3);" onclick="exportExcel()">Export Excel</button>
+          </div>
           <div id="save-status" class="status"></div>
         </div>
 
@@ -200,9 +206,11 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // ===========================================================================
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const METRO_COMPANY_ID = "b00ca9bc-d669-492d-8ad5-2d2783321ade";
 
 let currentUser = null;
 let currentProfile = null;
+let staffList = []; // active Metro staff for the "Prepared By" dropdown
 let quote = null; // active quote state
 
 function emptyQuote() {
@@ -211,6 +219,7 @@ function emptyQuote() {
     clientName: "", address: "", phone: "",
     date: new Date().toISOString().slice(0,10),
     notes: "",
+    preparedBy: currentUser ? currentUser.id : null,
     cogMarkup: 25, laborMarkup: 25, overheadPct: 30,
     items: [
       { id: crypto.randomUUID(), type: "material", description: "", qty: 1, unitCost: 0 },
@@ -238,21 +247,57 @@ async function logout() {
 }
 
 async function afterLogin() {
-  // ensure profile row exists
-  const { data: existing } = await sb.from("profiles").select("*").eq("id", currentUser.id).maybeSingle();
-  if (!existing) {
-    const displayName = currentUser.email.split("@")[0];
-    await sb.from("profiles").insert({ id: currentUser.id, display_name: displayName });
-    currentProfile = { id: currentUser.id, display_name: displayName };
-  } else {
-    currentProfile = existing;
+  const { data: profile, error } = await sb.from("profiles").select("*").eq("id", currentUser.id).maybeSingle();
+  const errEl = document.getElementById("login-error");
+
+  if (error || !profile) {
+    errEl.textContent = "No staff profile found for this login.";
+    await sb.auth.signOut();
+    return;
   }
-  document.getElementById("who").textContent = currentProfile.display_name;
-  document.getElementById("f-preparedBy").value = currentProfile.display_name;
+  if (profile.company_id !== METRO_COMPANY_ID) {
+    errEl.textContent = "This login isn't set up for Metro's quote tool.";
+    await sb.auth.signOut();
+    return;
+  }
+  if (profile.active === false) {
+    errEl.textContent = "This account is inactive. Contact an admin.";
+    await sb.auth.signOut();
+    return;
+  }
+
+  currentProfile = profile;
+  document.getElementById("who").textContent = currentProfile.full_name || currentUser.email;
+
+  await loadStaffList();
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   newQuote();
   loadSavedList();
+}
+
+async function loadStaffList() {
+  const { data, error } = await sb
+    .from("profiles")
+    .select("id, full_name")
+    .eq("company_id", METRO_COMPANY_ID)
+    .eq("active", true)
+    .order("full_name");
+  staffList = error ? [] : (data || []);
+  const sel = document.getElementById("f-preparedBy");
+  sel.innerHTML = "";
+  staffList.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.full_name || p.id;
+    sel.appendChild(opt);
+  });
+  if (!staffList.find(p => p.id === currentUser.id)) {
+    const opt = document.createElement("option");
+    opt.value = currentUser.id;
+    opt.textContent = (currentProfile && currentProfile.full_name) || currentUser.email;
+    sel.appendChild(opt);
+  }
 }
 
 async function checkSession() {
@@ -278,6 +323,13 @@ function renderQuote() {
   document.getElementById("f-cogMarkup").value = quote.cogMarkup;
   document.getElementById("f-laborMarkup").value = quote.laborMarkup;
   document.getElementById("f-overheadPct").value = quote.overheadPct;
+  const sel = document.getElementById("f-preparedBy");
+  if (quote.preparedBy && [...sel.options].some(o => o.value === quote.preparedBy)) {
+    sel.value = quote.preparedBy;
+  } else if (sel.options.length) {
+    sel.selectedIndex = 0;
+    quote.preparedBy = sel.value;
+  }
   renderItems();
   recalc();
 }
@@ -293,6 +345,9 @@ function bindFieldListeners() {
       quote[f] = Number(e.target.value) || 0;
       recalc();
     });
+  });
+  document.getElementById("f-preparedBy").addEventListener("change", e => {
+    quote.preparedBy = e.target.value;
   });
 }
 
@@ -368,6 +423,192 @@ function recalc() {
   return { cogBase, laborBase, cogMarked, laborMarked, subtotal, overhead, total };
 }
 
+// ---------- EXPORT ----------
+function preparedByName() {
+  const p = staffList.find(s => s.id === quote.preparedBy);
+  return p ? p.full_name : (currentProfile ? currentProfile.full_name : "");
+}
+
+function exportFilenameBase() {
+  const nameSlug = (quote.clientName || "client").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  return `quote-${nameSlug || "unnamed"}-${quote.date || new Date().toISOString().slice(0,10)}`;
+}
+
+function exportPDF() {
+  const totals = recalc();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const TEAL = [21, 76, 71];
+  const ORANGE = [244, 75, 26];
+  const GREY = [130, 130, 130];
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 50;
+  let y = 56;
+
+  // Header
+  doc.setFillColor(...TEAL);
+  doc.rect(0, 0, pageWidth, 6, "F");
+  doc.setFont("times", "bold");
+  doc.setFontSize(20);
+  doc.setTextColor(...TEAL);
+  doc.text("Metro Mobile Health Care", margin, y);
+  y += 20;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(...GREY);
+  doc.text("Aging in Place — Service Quote", margin, y);
+  y += 30;
+
+  // Client info block
+  doc.setDrawColor(224, 221, 213);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 20;
+  doc.setFontSize(10);
+  const infoLeft = [
+    ["Client", quote.clientName || "—"],
+    ["Address", quote.address || "—"],
+    ["Phone", quote.phone || "—"],
+  ];
+  const infoRight = [
+    ["Date", quote.date || "—"],
+    ["Prepared By", preparedByName() || "—"],
+  ];
+  let ly = y, ry = y;
+  infoLeft.forEach(([k, v]) => {
+    doc.setTextColor(...GREY); doc.text(k + ":", margin, ly);
+    doc.setTextColor(30, 30, 30); doc.text(String(v), margin + 70, ly);
+    ly += 16;
+  });
+  infoRight.forEach(([k, v]) => {
+    doc.setTextColor(...GREY); doc.text(k + ":", margin + 300, ry);
+    doc.setTextColor(30, 30, 30); doc.text(String(v), margin + 380, ry);
+    ry += 16;
+  });
+  y = Math.max(ly, ry) + 14;
+
+  // Line items table header
+  doc.setFillColor(21, 76, 71);
+  doc.rect(margin, y, pageWidth - margin * 2, 22, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.text("TYPE", margin + 8, y + 15);
+  doc.text("DESCRIPTION", margin + 70, y + 15);
+  doc.text("QTY", margin + 330, y + 15);
+  doc.text("UNIT COST", margin + 380, y + 15);
+  doc.text("LINE TOTAL", pageWidth - margin - 8, y + 15, { align: "right" });
+  y += 22;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  quote.items.forEach((it, idx) => {
+    if (y > 700) { doc.addPage(); y = 56; }
+    if (idx % 2 === 0) {
+      doc.setFillColor(247, 245, 240);
+      doc.rect(margin, y, pageWidth - margin * 2, 20, "F");
+    }
+    doc.setTextColor(30, 30, 30);
+    doc.text(it.type === "material" ? "Material" : "Labor", margin + 8, y + 14);
+    doc.text((it.description || "").slice(0, 44), margin + 70, y + 14);
+    doc.text(String(it.qty), margin + 330, y + 14);
+    doc.text(currency(it.unitCost), margin + 380, y + 14);
+    doc.text(currency(it.qty * it.unitCost), pageWidth - margin - 8, y + 14, { align: "right" });
+    y += 20;
+  });
+
+  y += 20;
+  if (y > 650) { doc.addPage(); y = 56; }
+
+  // Pricing breakdown
+  const rows = [
+    ["Materials (COG)", currency(totals.cogBase)],
+    [`Materials + ${quote.cogMarkup}% markup`, currency(totals.cogMarked)],
+    ["Labor (base)", currency(totals.laborBase)],
+    [`Labor + ${quote.laborMarkup}% markup`, currency(totals.laborMarked)],
+  ];
+  doc.setFontSize(10);
+  rows.forEach(([k, v]) => {
+    doc.setTextColor(...GREY); doc.text(k, pageWidth - margin - 220, y);
+    doc.setTextColor(30, 30, 30); doc.text(v, pageWidth - margin - 8, y, { align: "right" });
+    y += 16;
+  });
+  doc.line(pageWidth - margin - 220, y, pageWidth - margin, y);
+  y += 16;
+  doc.setTextColor(...GREY); doc.text("Subtotal", pageWidth - margin - 220, y);
+  doc.setTextColor(30, 30, 30); doc.text(currency(totals.subtotal), pageWidth - margin - 8, y, { align: "right" });
+  y += 16;
+  doc.setTextColor(...GREY); doc.text(`Overhead / profit (${quote.overheadPct}%)`, pageWidth - margin - 220, y);
+  doc.setTextColor(30, 30, 30); doc.text(currency(totals.overhead), pageWidth - margin - 8, y, { align: "right" });
+  y += 22;
+  doc.setDrawColor(...ORANGE);
+  doc.setLineWidth(1.2);
+  doc.line(pageWidth - margin - 220, y - 14, pageWidth - margin, y - 14);
+  doc.setFont("times", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(...ORANGE);
+  doc.text("Total", pageWidth - margin - 220, y + 6);
+  doc.text(currency(totals.total), pageWidth - margin - 8, y + 6, { align: "right" });
+  y += 34;
+
+  // Notes
+  if (quote.notes) {
+    if (y > 680) { doc.addPage(); y = 56; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...TEAL);
+    doc.text("Notes", margin, y);
+    y += 14;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(60, 60, 60);
+    const split = doc.splitTextToSize(quote.notes, pageWidth - margin * 2);
+    doc.text(split, margin, y);
+  }
+
+  doc.save(exportFilenameBase() + ".pdf");
+}
+
+function exportExcel() {
+  const totals = recalc();
+  const rows = [];
+  rows.push(["Metro Mobile Health Care — Aging in Place Quote"]);
+  rows.push([]);
+  rows.push(["Client", quote.clientName || ""]);
+  rows.push(["Address", quote.address || ""]);
+  rows.push(["Phone", quote.phone || ""]);
+  rows.push(["Date", quote.date || ""]);
+  rows.push(["Prepared By", preparedByName() || ""]);
+  rows.push([]);
+  rows.push(["Type", "Description", "Qty", "Unit Cost", "Line Total"]);
+  quote.items.forEach(it => {
+    rows.push([
+      it.type === "material" ? "Material" : "Labor",
+      it.description || "",
+      it.qty,
+      Number(it.unitCost.toFixed(2)),
+      Number((it.qty * it.unitCost).toFixed(2)),
+    ]);
+  });
+  rows.push([]);
+  rows.push(["Materials (COG)", "", "", "", Number(totals.cogBase.toFixed(2))]);
+  rows.push([`Materials + ${quote.cogMarkup}% markup`, "", "", "", Number(totals.cogMarked.toFixed(2))]);
+  rows.push(["Labor (base)", "", "", "", Number(totals.laborBase.toFixed(2))]);
+  rows.push([`Labor + ${quote.laborMarkup}% markup`, "", "", "", Number(totals.laborMarked.toFixed(2))]);
+  rows.push(["Subtotal", "", "", "", Number(totals.subtotal.toFixed(2))]);
+  rows.push([`Overhead / profit (${quote.overheadPct}%)`, "", "", "", Number(totals.overhead.toFixed(2))]);
+  rows.push(["TOTAL", "", "", "", Number(totals.total.toFixed(2))]);
+  if (quote.notes) {
+    rows.push([]);
+    rows.push(["Notes", quote.notes]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 34 }, { wch: 34 }, { wch: 8 }, { wch: 12 }, { wch: 14 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Quote");
+  XLSX.writeFile(wb, exportFilenameBase() + ".xlsx");
+}
+
 // ---------- PERSISTENCE ----------
 async function saveQuote() {
   const statusEl = document.getElementById("save-status");
@@ -378,7 +619,8 @@ async function saveQuote() {
   try {
     let quoteId = quote.id;
     const payload = {
-      created_by: currentUser.id,
+      company_id: METRO_COMPANY_ID,
+      created_by: quote.preparedBy || currentUser.id,
       client_name: quote.clientName,
       address: quote.address,
       phone: quote.phone,
@@ -428,7 +670,8 @@ async function loadSavedList() {
   listEl.innerHTML = `<div class="saved-item">Loading...</div>`;
   const { data, error } = await sb
     .from("quotes")
-    .select("id, client_name, quote_date, created_by, profiles(display_name)")
+    .select("id, client_name, quote_date, created_by, profiles(full_name)")
+    .eq("company_id", METRO_COMPANY_ID)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) { listEl.innerHTML = `<div class="saved-item">Couldn't load quotes.</div>`; return; }
@@ -440,7 +683,7 @@ async function loadSavedList() {
     row.innerHTML = `
       <button style="background:none;border:none;text-align:left;cursor:pointer;padding:0;flex:1;" onclick="loadQuote('${rec.id}')">
         <div class="name">${escapeHtml(rec.client_name || "Unnamed client")}</div>
-        <div class="meta">${rec.quote_date} · by ${escapeHtml(rec.profiles ? rec.profiles.display_name : "?")}</div>
+        <div class="meta">${rec.quote_date} · by ${escapeHtml(rec.profiles ? rec.profiles.full_name : "?")}</div>
       </button>
       <button class="btn danger" onclick="deleteQuote('${rec.id}')">✕</button>
     `;
@@ -456,6 +699,7 @@ async function loadQuote(id) {
     id: q.id,
     clientName: q.client_name, address: q.address, phone: q.phone,
     date: q.quote_date, notes: q.notes,
+    preparedBy: q.created_by,
     cogMarkup: q.cog_markup, laborMarkup: q.labor_markup, overheadPct: q.overhead_pct,
     items: (items||[]).map(i => ({ id: crypto.randomUUID(), type: i.item_type, description: i.description, qty: Number(i.qty), unitCost: Number(i.unit_cost) })),
   };
