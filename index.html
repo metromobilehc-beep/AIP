@@ -42,6 +42,10 @@
   .item-row{display:grid;grid-template-columns:100px 1fr 60px 100px 100px 28px;gap:8px;align-items:center;margin-bottom:8px;}
   .item-head{font-size:11px;color:#999;}
   .chip{background:#F1EFE8;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--teal-dark);}
+  .cat-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#fcfbf8;}
+  .cat-item .cat-name{font-size:13px;font-weight:600;color:var(--ink);}
+  .cat-item .cat-meta{font-size:11px;color:#999;margin-top:2px;}
+  .cat-item .cat-add{flex-shrink:0;}
   .summary{background:var(--teal-dark);color:#fff;border-radius:10px;padding:20px;position:sticky;top:20px;}
   .summary .row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
   .summary .row.dim{opacity:.75;}
@@ -152,6 +156,15 @@
         </div>
 
         <div class="card">
+          <div class="section-title">Materials & Labor Catalog</div>
+          <div style="font-size:12px;color:#888;margin-bottom:10px;">
+            Search a modification and add it — drops in a materials line and, where relevant, an estimated labor-hours line at your standard rate. Every number is a starting point, not a locked price — adjust per job.
+          </div>
+          <input id="catalog-search" placeholder="Search e.g. grab bar, ramp, stair lift, flooring..." oninput="renderCatalog()" style="margin-bottom:12px;" />
+          <div id="catalog-list" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;"></div>
+        </div>
+
+        <div class="card">
           <div class="section-title">Notes</div>
           <textarea id="f-notes" rows="4" placeholder="Assessment findings, access notes, follow-up items..."></textarea>
         </div>
@@ -231,6 +244,72 @@ function emptyQuote() {
       { id: crypto.randomUUID(), type: "material", description: "", qty: 1, unitCost: 0 },
     ],
   };
+}
+
+// ---------- MATERIALS & LABOR CATALOG ----------
+// materialCost = typical materials-only cost (COG) per unit, editable per quote after adding.
+// laborHours = typical install hours per unit — used to auto-add a matching labor line.
+// unit = what qty represents ("each", "linear ft", "sq ft", "doorway", "flat fee").
+// Sourced from 2026 national/Tulsa-area remodeling cost guides — treat as a starting point.
+const CATALOG = [
+  { label: "Home Safety Assessment", unit: "flat fee", materialCost: 0, laborHours: 1.5 },
+  { label: "Grab Bar — standard", unit: "each", materialCost: 35, laborHours: 1 },
+  { label: "Grab Bar — tile/masonry wall", unit: "each", materialCost: 45, laborHours: 1.5 },
+  { label: "Wheelchair Ramp — aluminum modular", unit: "linear ft", materialCost: 180, laborHours: 0.5 },
+  { label: "Wheelchair Ramp — pressure-treated wood", unit: "linear ft", materialCost: 130, laborHours: 0.75 },
+  { label: "Threshold Ramp (small, portable)", unit: "each", materialCost: 75, laborHours: 0.5 },
+  { label: "Handrail", unit: "linear ft", materialCost: 25, laborHours: 0.3 },
+  { label: "Stair Lift — straight rail", unit: "each", materialCost: 3500, laborHours: 4 },
+  { label: "Stair Lift — curved rail", unit: "each", materialCost: 9000, laborHours: 8 },
+  { label: "Walk-In Tub", unit: "each", materialCost: 4500, laborHours: 10 },
+  { label: "Curbless / Walk-In Shower Conversion", unit: "each", materialCost: 3500, laborHours: 20 },
+  { label: "Comfort-Height Toilet", unit: "each", materialCost: 350, laborHours: 2 },
+  { label: "Raised Toilet Seat Adapter", unit: "each", materialCost: 45, laborHours: 0.25 },
+  { label: "Non-Slip Flooring", unit: "sq ft", materialCost: 4, laborHours: 0.1 },
+  { label: "Lever Door Handle", unit: "each", materialCost: 30, laborHours: 0.5 },
+  { label: "Doorway Widening", unit: "doorway", materialCost: 250, laborHours: 6 },
+  { label: "Motion Sensor Light", unit: "each", materialCost: 35, laborHours: 0.75 },
+  { label: "Follow-Up Home Visit", unit: "flat fee", materialCost: 0, laborHours: 1 },
+];
+
+function renderCatalog() {
+  const q = (document.getElementById("catalog-search").value || "").toLowerCase().trim();
+  const listEl = document.getElementById("catalog-list");
+  const matches = CATALOG.filter(c => c.label.toLowerCase().includes(q));
+  listEl.innerHTML = "";
+  if (!matches.length) {
+    listEl.innerHTML = `<div style="font-size:13px;color:#999;padding:6px 0;">No matches — try a different term, or add a custom line above.</div>`;
+    return;
+  }
+  matches.forEach(c => {
+    const row = document.createElement("div");
+    row.className = "cat-item";
+    const laborNote = c.laborHours ? ` · ~${c.laborHours} hr labor` : "";
+    row.innerHTML = `
+      <div>
+        <div class="cat-name">${escapeHtml(c.label)}</div>
+        <div class="cat-meta">${currency(c.materialCost)} / ${c.unit}${laborNote}</div>
+      </div>
+      <button class="btn ghost small cat-add">+ Add</button>
+    `;
+    row.querySelector(".cat-add").addEventListener("click", () => addCatalogItem(c));
+    listEl.appendChild(row);
+  });
+}
+
+function addCatalogItem(c) {
+  if (c.materialCost > 0 || c.laborHours === 0) {
+    quote.items.push({ id: crypto.randomUUID(), type: "material", description: c.label, qty: 1, unitCost: c.materialCost });
+  }
+  if (c.laborHours > 0) {
+    quote.items.push({
+      id: crypto.randomUUID(), type: "labor",
+      description: c.label + " — install labor",
+      qty: c.laborHours, unitCost: quote.laborRate || 0,
+    });
+  }
+  renderItems();
+  recalc();
 }
 
 // ---------- AUTH ----------
@@ -737,6 +816,7 @@ async function deleteQuote(id) {
 
 // ---------- INIT ----------
 bindFieldListeners();
+renderCatalog();
 checkSession();
 </script>
 </body>
