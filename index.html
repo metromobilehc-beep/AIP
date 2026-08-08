@@ -122,12 +122,13 @@
     </div>
     <div class="right">
       <span id="who"></span>
-      <button class="btn secondary" onclick="newQuote()">New Quote</button>
+      <button id="nav-admin-btn" class="btn secondary hidden" onclick="showAdminView()">Catalog Admin</button>
+      <button class="btn secondary" onclick="showQuoteView(); newQuote();">New Quote</button>
       <button class="btn secondary" onclick="logout()">Sign Out</button>
     </div>
   </header>
 
-  <div class="wrap">
+  <div id="quote-view" class="wrap">
     <div class="layout">
       <!-- MAIN -->
       <div>
@@ -164,21 +165,6 @@
           </div>
           <input id="catalog-search" placeholder="Search e.g. grab bar, ramp, stair lift, flooring..." oninput="renderCatalog()" style="margin-bottom:12px;" />
           <div id="catalog-list" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;"></div>
-        </div>
-
-        <div id="catalog-admin-card" class="card hidden">
-          <div class="section-title">Catalog Admin</div>
-          <div style="font-size:12px;color:#888;margin-bottom:12px;">
-            Add or edit the items everyone sees in the catalog search above. Only visible to admins.
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line);">
-            <div style="flex:2;min-width:160px;"><label>Item name</label><input id="new-cat-label" placeholder="e.g. Bidet Attachment" /></div>
-            <div style="width:110px;"><label>Unit</label><input id="new-cat-unit" placeholder="each" /></div>
-            <div style="width:100px;"><label>Material $</label><input id="new-cat-cost" type="number" step="0.01" placeholder="0" /></div>
-            <div style="width:90px;"><label>Labor hrs</label><input id="new-cat-hours" type="number" step="0.05" placeholder="0" /></div>
-            <button class="btn" onclick="addNewCatalogItem()">Add Item</button>
-          </div>
-          <div id="catalog-admin" style="display:flex;flex-direction:column;gap:8px;"></div>
         </div>
 
         <div class="card">
@@ -231,6 +217,24 @@
           <div id="saved-list"><div class="saved-item">Loading...</div></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="admin-view" class="wrap hidden">
+    <button class="btn ghost small" style="margin-bottom:16px;" onclick="showQuoteView()">← Back to Quote</button>
+    <div class="card">
+      <div class="section-title">Catalog Admin</div>
+      <div style="font-size:12px;color:#888;margin-bottom:12px;">
+        Add or edit the items everyone sees in the catalog search on the quote screen. Only visible to admins.
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line);">
+        <div style="flex:2;min-width:160px;"><label>Item name</label><input id="new-cat-label" placeholder="e.g. Bidet Attachment" /></div>
+        <div style="width:110px;"><label>Unit</label><input id="new-cat-unit" placeholder="each" /></div>
+        <div style="width:100px;"><label>Material $</label><input id="new-cat-cost" type="number" step="0.01" placeholder="0" /></div>
+        <div style="width:90px;"><label>Labor hrs</label><input id="new-cat-hours" type="number" step="0.05" placeholder="0" /></div>
+        <button class="btn" onclick="addNewCatalogItem()">Add Item</button>
+      </div>
+      <div id="catalog-admin" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
   </div>
 </div>
@@ -392,7 +396,7 @@ async function login() {
 async function logout() {
   await sb.auth.signOut();
   currentUser = null; currentProfile = null; isAdmin = false; catalogItems = [];
-  document.getElementById("catalog-admin-card").classList.add("hidden");
+  document.getElementById("nav-admin-btn").classList.add("hidden");
   document.getElementById("app").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
 }
@@ -420,14 +424,25 @@ async function afterLogin() {
   currentProfile = profile;
   isAdmin = profile.is_super_admin === true;
   document.getElementById("who").textContent = currentProfile.full_name || currentUser.email;
-  document.getElementById("catalog-admin-card").classList.toggle("hidden", !isAdmin);
+  document.getElementById("nav-admin-btn").classList.toggle("hidden", !isAdmin);
 
   await loadStaffList();
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
+  showQuoteView();
   newQuote();
   loadSavedList();
   loadCatalog();
+}
+
+function showAdminView() {
+  document.getElementById("quote-view").classList.add("hidden");
+  document.getElementById("admin-view").classList.remove("hidden");
+}
+
+function showQuoteView() {
+  document.getElementById("admin-view").classList.add("hidden");
+  document.getElementById("quote-view").classList.remove("hidden");
 }
 
 async function loadStaffList() {
